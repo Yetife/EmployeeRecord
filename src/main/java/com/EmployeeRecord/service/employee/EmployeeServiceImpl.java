@@ -5,6 +5,11 @@ import com.EmployeeRecord.data.models.dto.EmployeeDto;
 import com.EmployeeRecord.data.repository.EmployeeRepository;
 import com.EmployeeRecord.web.exceptions.EmployeeDoesNotExistException;
 import com.EmployeeRecord.web.exceptions.EmployeeLogicException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.fge.jsonpatch.JsonPatch;
+import com.github.fge.jsonpatch.JsonPatchException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -53,8 +58,33 @@ public class EmployeeServiceImpl implements EmployeeService{
         throw new EmployeeDoesNotExistException("Employee with Id " + employeeId + "does not exist");
     }
 
+    private Employee saveEmployee(Employee employee) throws EmployeeLogicException {
+        if (employee == null){
+            throw new EmployeeLogicException("employee cannot be null");
+        }
+        return employeeRepository.save(employee);
+    }
+
     @Override
-    public Employee updateEmployeeRecord(Long employeeId, EmployeeDto employeeDto) {
-        return null;
+    public Employee updateEmployeeRecord(Long employeeId, JsonPatch employeePatch) throws EmployeeLogicException {
+        Optional<Employee> employeeQuery = employeeRepository.findById(employeeId);
+        if(employeeQuery.isEmpty()) {
+            throw new EmployeeLogicException("Employee with Id "+ employeeId + "does not exist");
+        }
+        Employee targetEmployee = employeeQuery.get();
+
+        try{
+            targetEmployee = applyPatchToEmployeeRecord(employeePatch, targetEmployee);
+            return saveEmployee(targetEmployee);
+        }catch(JsonPatchException | JsonProcessingException | EmployeeLogicException e){
+            throw new EmployeeLogicException("Update failed");
+        }
+    }
+
+    private Employee applyPatchToEmployeeRecord(JsonPatch employeePatch, Employee targetEmployee) throws JsonProcessingException, JsonPatchException {
+        ObjectMapper ObjectMapper = new ObjectMapper();
+        JsonNode patched = employeePatch.apply(ObjectMapper.convertValue(targetEmployee, JsonNode.class));
+        return ObjectMapper.treeToValue(patched, Employee.class);
+
     }
 }
